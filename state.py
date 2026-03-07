@@ -30,6 +30,11 @@ class HuddleState:
         self._channel_members: set[str] = set()
         self._channel_members_updated: float = 0.0
 
+        self._pending_call_id: str | None = None
+        self._pending_user_id: str | None = None
+        self._pending_dm_ts: str | None = None
+        self._pending_participants: dict[str, str] = {}
+
 
     @property
     def active(self) -> bool:
@@ -115,48 +120,86 @@ class HuddleState:
             self._seen_cert_ids.add(cert_id)
 
 
-    def is_channel_member(
-        self, client: WebClient, user_id: str, channel_id: str
+    def is_usergroup_member(
+        self, client: WebClient, user_id: str, usergroup_id: str
     ) -> bool:
-        """if <user_id> in the *channel_id*"""
-        
+        """Check if <user_id> is in the usergroup (ping group)."""
+
         with self._lock:
             cache_age = time.monotonic() - self._channel_members_updated
             need_refresh = cache_age > CHANNEL_MEMBER_CACHE_TTL or not self._channel_members
 
         if need_refresh:
-            self._refresh_channel_members(client, channel_id)
+            self._refresh_usergroup_members(client, usergroup_id)
 
         with self._lock:
             return user_id in self._channel_members
 
-    def _refresh_channel_members(
-        self, client: WebClient, channel_id: str
+    def _refresh_usergroup_members(
+        self, client: WebClient, usergroup_id: str
     ) -> None:
 
         members: set[str] = set()
         try:
-            cursor = None
-            while True:
-                kwargs: dict = {"channel": channel_id, "limit": 200}
-                if cursor:
-                    kwargs["cursor"] = cursor
-                resp = client.conversations_members(**kwargs)
-                members.update(resp.get("members", []))
-                cursor = resp.get("response_metadata", {}).get("next_cursor")
-                if not cursor:
-                    break
+            resp = client.usergroups_users_list(usergroup=usergroup_id)
+            members.update(resp.get("users", []))
         except Exception:
             logger.exception(
-                "Failed to fetch channel members for %s — using stale cache", channel_id
+                "Failed to fetch usergroup members for %s — using stale cache", usergroup_id
             )
-            return  # keep old cache rather than wiping it
+            return
 
         with self._lock:
             self._channel_members = members
             self._channel_members_updated = time.monotonic()
-            logger.debug("Refreshed channel member cache: %d members", len(members))
+            logger.debug("Refreshed usergroup member cache: %d members", len(members))
 
+
+
+
+    def set_pending(
+        self, call_id: str, user_id: str, dm_ts: str
+    ) -> None:
+        """Store the huddle that is waiting for my approval :)"""
+
+        with self._lock:
+            self._pending_call_id = call_id
+            self._pending_user_id = user_id
+            self._pending_dm_ts = dm_ts
+            self._pending_participants.clear()
+
+    def get_pending(self) -> tuple[str | None, str | None, str | None]:
+
+        with self._lock:
+            return (
+                self._pending_call_id,
+                self._pending_user_id,
+                self._pending_dm_ts,
+            )
+
+    @property
+    def pending_call_id(self) -> str | None:
+        with self._lock:
+            return self._pending_call_id
+
+    def clear_pending(self) -> None:
+        with self._lock:
+            self._pending_call_id = None
+            self._pending_user_id = None
+            self._pending_dm_ts = None
+            self._pending_participants.clear()
+
+    def queue_pending_participant(self, slack_id: str, name: str) -> bool:
+
+        with self._lock:
+            if slack_id in self._pending_participants:
+                return False
+            self._pending_participants[slack_id] = name
+            return True
+
+    def get_pending_participants(self) -> dict[str, str]:
+        with self._lock:
+            return dict(self._pending_participants)
 
 
     def start_session(self, call_id: str) -> None:
@@ -169,6 +212,11 @@ class HuddleState:
             self._seen_cert_ids.clear()
             self._leaderboard_ts = None
             self._announcement_ts = None
+
+            self._pending_call_id = None
+            self._pending_user_id = None
+            self._pending_dm_ts = None
+            self._pending_participants.clear()
 
     def schedule_end(self, callback) -> None:
         """Schedule session end after grace period.
@@ -217,6 +265,11 @@ class HuddleState:
             self._seen_cert_ids.clear()
             self._leaderboard_ts = None
             self._announcement_ts = None
+
+            self._pending_call_id = None
+            self._pending_user_id = None
+            self._pending_dm_ts = None
+            self._pending_participants.clear()
 
 
 
