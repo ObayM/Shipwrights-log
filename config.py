@@ -28,5 +28,8 @@ LEADERBOARD_INTERVAL: int = int(os.environ.get("LEADERBOARD_INTERVAL", "600"))
 REDACTED_SENTINEL = "REDACTED"
 
 CHANNEL_MEMBER_CACHE_TTL: int = 300  # 5 minutes
-BOT_ADMIN_ID: str = os.environ["BOT_ADMIN_ID"]
-HUDDLE_USERGROUP_ID: str = os.environ["HUDDLE_USERGROUP_ID"]
+# BOT_ADMIN_ID: str = os.environ["BOT_ADMIN_ID"] Until @Nullskulls adds my new env on coolify
+BOT_ADMIN_ID: str = "U07LKN2HXT3"
+# HUDDLE_USERGROUP_ID: str = os.environ["HUDDLE_USERGROUP_ID"]
+HUDDLE_USERGROUP_ID: str = "S09TJU4TT36"
+
