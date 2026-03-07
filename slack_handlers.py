@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from config import BOT_ADMIN_ID, HUDDLE_CHANNEL_ID, HUDDLE_USERGROUP_ID, LOG_CHANNEL_ID, REDACTED_SENTINEL, logger
 from state import state
 from leaderboard import format_reviewer_line
+
+_seen_events: OrderedDict[str, None] = OrderedDict()
+_SEEN_EVENTS_MAX = 50
 
 if TYPE_CHECKING:
     from slack_bolt import App
@@ -439,10 +443,54 @@ def handle_ignore_huddle(ack, body, client) -> None:
     logger.info("Huddle ignored (call_id=%s)", call_id)
 
 
+def handle_subteam_members_changed(event: dict, client) -> None:
+
+    event_ts = event.get("event_ts", "")
+    if event_ts in _seen_events:
+        logger.debug("skip a duplicate (event_ts=%s)", event_ts)
+        return
+
+    _seen_events[event_ts] = None
+    if len(_seen_events) > _SEEN_EVENTS_MAX:
+        _seen_events.popitem(last=False)
+
+    subteam_id = event.get("subteam_id", "")
+    if subteam_id != HUDDLE_USERGROUP_ID:
+        return
+
+    added = event.get("added_users", [])
+    removed = event.get("removed_users", [])
+
+    for uid in added:
+        try:
+            client.chat_postMessage(
+                channel=LOG_CHANNEL_ID,
+                text=f"New shipwright, <@{uid}> :)",
+            )
+        except Exception:
+            logger.exception("Failed to send welcome message for %s", uid)
+
+    for uid in removed:
+        try:
+            client.chat_postMessage(
+                channel=LOG_CHANNEL_ID,
+                text=f"<@{uid}> is no longer a Shipwright :sad-yeehaw:",
+            )
+        except Exception:
+            logger.exception("Failed to send farewell message for %s", uid)
+
+    if added or removed:
+        logger.info(
+            "Shipwrights membership change: +%d joined, -%d left",
+            len(added),
+            len(removed),
+        )
+
 
 def register(app: App) -> None:
 
     app.event("user_huddle_changed")(handle_huddle_changed)
+    app.event("subteam_members_changed")(handle_subteam_members_changed)
 
     app.action("approve_huddle")(handle_approve_huddle)
     app.action("ignore_huddle")(handle_ignore_huddle)
