@@ -27,6 +27,10 @@ class HuddleState:
         self._seen_cert_ids: set[int] = set()
         self._end_timer: threading.Timer | None = None
 
+
+        self._seen_queue_ids: set[int] = set()
+        self._queue_seeded: bool = False
+
         self._channel_members: set[str] = set()
         self._channel_members_updated: float = 0.0
 
@@ -118,6 +122,27 @@ class HuddleState:
     def mark_cert_seen(self, cert_id: int) -> None:
         with self._lock:
             self._seen_cert_ids.add(cert_id)
+
+
+
+    @property
+    def queue_seeded(self) -> bool:
+        with self._lock:
+            return self._queue_seeded
+
+    def seed_queue_ids(self, ids: set[int]) -> None:
+        """Bulk-mark existing pending IDs on first boot so we don't spam."""
+        with self._lock:
+            self._seen_queue_ids.update(ids)
+            self._queue_seeded = True
+
+    def has_seen_queue_project(self, project_id: int) -> bool:
+        with self._lock:
+            return project_id in self._seen_queue_ids
+
+    def mark_queue_project_seen(self, project_id: int) -> None:
+        with self._lock:
+            self._seen_queue_ids.add(project_id)
 
 
     def is_usergroup_member(

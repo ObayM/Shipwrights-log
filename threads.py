@@ -5,7 +5,7 @@ import time
 from config import POLL_INTERVAL, LEADERBOARD_INTERVAL, logger
 from state import state
 from api import fetch_certs
-from slack_handlers import _announce_review
+from slack_handlers import _announce_review, _announce_new_queue_project
 from leaderboard import post_or_update_leaderboard
 
 
@@ -95,3 +95,44 @@ def leaderboard_loop(client) -> None:
             logger.exception("Error in leaderboard loop")
 
         time.sleep(LEADERBOARD_INTERVAL)
+
+
+def poll_queue_loop(client) -> None:
+
+
+    logger.info("Queue polling thread started")
+
+    while True:
+        try:
+            pending = fetch_certs(status="pending", limit=50)
+
+            if not state.queue_seeded:
+
+                existing_ids = {
+                    p["id"] for p in pending if p.get("id") is not None
+                }
+                state.seed_queue_ids(existing_ids)
+                logger.info(
+                    "Seeded queue tracker with %d existing project(s)",
+                    len(existing_ids),
+                )
+            else:
+                for project in pending:
+                    pid = project.get("id")
+                    if pid is None:
+                        continue
+                    if state.has_seen_queue_project(pid):
+                        continue
+
+                    state.mark_queue_project_seen(pid)
+                    _announce_new_queue_project(client, project)
+                    logger.info(
+                        "Announced new queue project: %s (id=%s)",
+                        project.get("projectName"),
+                        pid,
+                    )
+
+        except Exception:
+            logger.exception("Error in queue polling loop")
+
+        time.sleep(POLL_INTERVAL)

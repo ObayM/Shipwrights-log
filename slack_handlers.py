@@ -93,6 +93,90 @@ def _announce_review(client, cert: dict, reviewer_slack_id: str) -> None:
         logger.exception("Failed to announce review")
 
 
+def _announce_new_queue_project(client, project: dict) -> None:
+    """Post a message for every new project in the queue"""
+
+    name = project.get("projectName", "Unnamed Project")
+    p_type = project.get("projectType", "Project")
+    description = (project.get("description") or "").strip()
+    if len(description) > 300:
+        description = description[:297] + "…"
+    dev_time = project.get("devTime", "N/A")
+    demo_url = project.get("demoUrl", "")
+    repo_url = project.get("repoUrl", "")
+    readme_url = project.get("readmeUrl", "")
+    created_at = project.get("createdAt", "")
+
+
+    submitted_str = ""
+    if created_at:
+        try:
+            dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            ts = int(dt.timestamp())
+            submitted_str = f"<!date^{ts}^{{date_short_pretty}} at {{time}}|{created_at}>"
+        except Exception:
+            submitted_str = created_at
+
+    blocks: list[dict] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"New Ship in the Queue!"},
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"*{name}*  ·  `{p_type}`\n\n"
+                    f"{description}"
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "fields": [
+                {"type": "mrkdwn", "text": f"*Dev Time:*\n{dev_time}"},
+                {"type": "mrkdwn", "text": f"*Submitted:*\n{submitted_str or 'N/A'}"},
+            ],
+        },
+    ]
+
+    project_id = project.get("id")
+    links: list[str] = []
+    if project_id is not None:
+        dash_url = f"https://review.hackclub.com/admin/ship_certifications/{project_id}/edit"
+        links.append(f"<{dash_url}|#{project_id}>")
+    if demo_url:
+        links.append(f"<{demo_url}|Demo>")
+    if repo_url:
+        links.append(f"<{repo_url}|Repo>")
+    if readme_url:
+        links.append(f"<{readme_url}|README>")
+    if links:
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": "  ·  ".join(links)}],
+            }
+        )
+
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"cc <@{BOT_ADMIN_ID}>"}],
+        }
+    )
+
+    try:
+        client.chat_postMessage(
+            channel=LOG_CHANNEL_ID,
+            blocks=blocks,
+            text=f"New ship in queue: {name} ({p_type})",
+        )
+    except Exception:
+        logger.exception("Failed to announce new queue project %s", name)
+
 
 
 def _send_confirmation_dm(client, user_id: str, display_name: str, call_id: str) -> None:
