@@ -164,7 +164,7 @@ def _announce_new_queue_project(client, project: dict) -> None:
     blocks.append(
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"cc <@{BOT_ADMIN_ID}>"}],
+            "elements": [{"type": "mrkdwn", "text": f"cc <@S0AK35HTFLP>"}],
         }
     )
 
