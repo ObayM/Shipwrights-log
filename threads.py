@@ -2,11 +2,33 @@ from __future__ import annotations
 
 import time
 
-from config import POLL_INTERVAL, LEADERBOARD_INTERVAL, logger
+from datetime import datetime, timezone
+from config import POLL_INTERVAL, LEADERBOARD_INTERVAL, DAILY_STATS_HOUR, logger
 from state import state
 from api import fetch_certs
 from slack_handlers import _announce_review, _announce_new_queue_project
 from leaderboard import post_or_update_leaderboard
+from daily_stats import post_daily_queue_stats
+
+
+def daily_stats_loop(client) -> None:
+
+    logger.info("Daily stats loop started (target hour: %d UTC)", DAILY_STATS_HOUR)
+    last_post_date = None
+
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            current_date = now.date()
+            
+            if now.hour == DAILY_STATS_HOUR and last_post_date != current_date:
+                post_daily_queue_stats(client)
+                last_post_date = current_date
+                
+        except Exception:
+            logger.exception("Error in daily stats loop")
+            
+        time.sleep(60)
 
 
 def poll_reviews_loop(client) -> None:

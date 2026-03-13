@@ -7,7 +7,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 import slack_handlers
-from threads import poll_reviews_loop, leaderboard_loop, poll_queue_loop
+from threads import poll_reviews_loop, leaderboard_loop, poll_queue_loop, daily_stats_loop
 
 app = App(token=SLACK_BOT_TOKEN)
 slack_handlers.register(app)
@@ -35,6 +35,13 @@ def main() -> None:
         daemon=True,
     )
     queue_thread.start()
+
+    daily_stats_thread = threading.Thread(
+        target=daily_stats_loop,
+        args=(app.client,),
+        daemon=True,
+    )
+    daily_stats_thread.start()
 
     handler = SocketModeHandler(app, SLACK_APP_TOKEN)
     logger.info("⚡ Review Huddle Bot is running!")
