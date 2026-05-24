@@ -70,10 +70,11 @@ def post_daily_queue_stats(client) -> None:
             "text": {"type": "mrkdwn", "text": featured_text}
         })
 
-    blocks.append({
-        "type": "context",
-        "elements": [{"type": "mrkdwn", "text": f"cc <!subteam^{HUDDLE_USERGROUP_ID}>"}]
-    })
+    if total_pending >= 5:
+        blocks.append({
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"cc <!subteam^{HUDDLE_USERGROUP_ID}>"}]
+        })
 
     try:
         client.chat_postMessage(
